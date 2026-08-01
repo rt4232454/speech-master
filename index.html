@@ -53,17 +53,6 @@
  }
  .correct-word { color: #27ae60; font-weight: bold; }
  .wrong-word { color: #e74c3c; text-decoration: underline; }
-
- /* アドバイス欄のスタイル */
- .advice-box {
- background-color: #ffffff;
- padding: 15px;
- border-radius: 8px;
- border-left: 5px solid #3498db;
- margin-top: 15px;
- font-size: 16px;
- box-shadow: 0 2px 5px rgba(0,0,0,0.05);
- }
  
  /* 履歴用のスタイル */
  .history-section { margin-top: 30px; border-top: 2px solid #eee; padding-top: 20px; }
@@ -148,6 +137,7 @@ let currentParaIndex = 0;
 let recognition = null;
 let isListening = false;
 
+// === 1フレーズ再生用の変数 ===
 let currentSentenceIndex = 0;
 let sentences = [];
 
@@ -156,6 +146,7 @@ function changeParagraph() {
  document.getElementById('mask-slider').value = 0;
  document.getElementById('feedback-display').style.display = 'none';
  
+ // 段落が変わったらフレーズ練習の状態をリセット
  currentSentenceIndex = 0;
  sentences = [];
  document.getElementById('play-phrase-btn').innerText = "🔊 フレーズ再生";
@@ -184,36 +175,45 @@ function updateText() {
  document.getElementById('text-display').innerText = displayText;
 }
 
+// === 文章をピリオド等の文末で分割する処理 ===
 function extractSentences() {
  const text = paragraphs[currentParaIndex];
+ // . ! ? で終わる1文を切り出す正規表現
  const matched = text.match(/[^.?!]+[.?!]+["']?/g);
  if (matched) {
  sentences = matched.map(function(s) { return s.trim(); });
  } else {
- sentences = [text];
+ sentences = [text]; // 分割できなかった場合は全体を1文として扱う
  }
 }
 
+// === 1フレーズ再生の処理 ===
 function playPhrase(direction) {
+ // まだ分割していなければ分割する
  if (sentences.length === 0) extractSentences();
 
+ // 前へ・次へ の移動を計算（directionが0なら現在の文をそのまま再生）
  currentSentenceIndex += direction;
  
+ // 最初や最後を超えたらループさせる
  if (currentSentenceIndex < 0) currentSentenceIndex = sentences.length - 1;
  if (currentSentenceIndex >= sentences.length) currentSentenceIndex = 0;
 
+ // 再生中の音声をストップ
  window.speechSynthesis.cancel();
  
  const sentenceToPlay = sentences[currentSentenceIndex];
  const utterance = new SpeechSynthesisUtterance(sentenceToPlay);
  utterance.lang = 'en-US';
- utterance.rate = parseFloat(document.getElementById('speed-select').value);
+ utterance.rate = parseFloat(document.getElementById('speed-select').value); // 速度設定を反映
  
+ // ボタンのテキストを「🔊 1/5文目」のように更新して現在地をわかりやすくする
  document.getElementById('play-phrase-btn').innerText = "🔊 " + (currentSentenceIndex + 1) + "/" + sentences.length + "文目";
 
  window.speechSynthesis.speak(utterance);
 }
 
+// === 全体再生の処理 ===
 function playAudio() {
  window.speechSynthesis.cancel();
  const text = paragraphs[currentParaIndex];
@@ -265,6 +265,12 @@ function initSpeechRecognition() {
  return true;
 }
 
+function toggleMic() {
+ if (!recognition) { if (!initSpeechRecognition()) return; }
+ if (isListening) recognition.stop();
+ else { try { recognition.start(); } catch (e) { console.error(e); } }
+}
+
 function evaluateSpeech(recognizedText) {
  const originalText = paragraphs[currentParaIndex];
  const tokens = originalText.match(/[\w']+|[^\w\s]+|\s+/g) || [];
@@ -272,11 +278,8 @@ function evaluateSpeech(recognizedText) {
 
  let html = "";
  let recIndex = 0;
- let correctCount = 0;
- let totalWords = 0;
- 
- // 間違えた単語を保存する配列
- let missedWords = [];
+ let correctCount = 0; // 正解した単語数
+ let totalWords = 0; // 全単語数
 
  tokens.forEach(function(token) {
  if (/[\w']+/.test(token)) {
@@ -291,7 +294,6 @@ function evaluateSpeech(recognizedText) {
  correctCount++;
  } else {
  html += '<span class="wrong-word">' + token + '</span>';
- missedWords.push(token); // 間違えた単語を記録
  }
  } else {
  html += token;
@@ -302,37 +304,9 @@ function evaluateSpeech(recognizedText) {
  const score = totalWords > 0 ? Math.round((correctCount / totalWords) * 100) : 0;
  const maskRatio = document.getElementById('slider-value').innerText;
 
- // --- 評価とアドバイスの生成 ---
- let evaluationMsg = "";
- if (score >= 90) {
- evaluationMsg = "🌟 素晴らしい！非常にクリアで聞き取りやすい発音です！";
- } else if (score >= 70) {
- evaluationMsg = "👍 とても良いですね！より滑らかに繋げて読めるように練習してみましょう。";
- } else if (score >= 50) {
- evaluationMsg = "💪 惜しい！赤色になっている単語を意識して、もう一度チャレンジ！";
- } else {
- evaluationMsg = "🌱 最初は難しくて当然です。「フレーズ再生」を使って1文ずつゆっくり練習するのがおすすめです。";
- }
-
- let adviceHtml = "";
- if (missedWords.length > 0) {
- // 重複を削除して先頭から5つ程度をピックアップ
- let uniqueMissed = [...new Set(missedWords.map(w => w.toLowerCase()))];
- let displayMissed = uniqueMissed.slice(0, 5).join(", ");
- adviceHtml = "<p style='margin-bottom: 0;'>💡 <b>ワンポイントアドバイス:</b><br>以下の単語のアクセントや発音を、お手本音声でよく確認してみましょう。<br>【 <b>" + displayMissed + (uniqueMissed.length > 5 ? " など" : "") + "</b> 】</p>";
- } else {
- adviceHtml = "<p style='margin-bottom: 0;'>💡 <b>ワンポイントアドバイス:</b><br>パーフェクトです！今のリズムと発音を忘れないように、何度か繰り返して定着させましょう。</p>";
- }
-
- // フィードバック画面の出力
  document.getElementById('feedback-display').innerHTML = 
  '<p><b>🗣️ あなたの声:</b><br>' + recognizedText + '</p>' +
- '<p><b>📝 判定結果（正答率: ' + score + '%）:</b></p>' +
- '<p style="margin-bottom: 20px;">' + html + '</p>' +
- '<div class="advice-box">' +
- '<p style="margin-top: 0;"><b>💬 AIからの評価:</b><br>' + evaluationMsg + '</p>' +
- adviceHtml +
- '</div>';
+ '<p><b>📝 判定結果（正答率: ' + score + '%）:</b></p><p>' + html + '</p>';
 
  // 履歴を保存して更新
  saveHistory(currentParaIndex + 1, maskRatio, score);
