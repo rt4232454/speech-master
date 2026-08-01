@@ -28,6 +28,18 @@
  button:hover { background-color: #2980b9; }
  #mic-btn { background-color: #2ecc71; }
  #mic-btn:hover { background-color: #27ae60; }
+ 
+ /* フレーズ練習用ボタンのスタイル */
+ .phrase-group {
+ display: flex; gap: 4px; align-items: center;
+ background-color: #fff; padding: 4px; border-radius: 8px; border: 1px solid #ddd;
+ }
+ .phrase-group button {
+ background-color: #f39c12; padding: 10px 12px; border-radius: 6px;
+ }
+ .phrase-group button:hover { background-color: #e67e22; }
+ #play-phrase-btn { min-width: 130px; text-align: center; }
+
  .slider-container { display: flex; align-items: center; gap: 10px; flex-grow: 1; min-width: 250px; }
  input[type=range] { flex-grow: 1; }
  #text-display {
@@ -75,7 +87,14 @@
  <option value="1.2">1.2x (少し速い)</option>
  </select>
 
- <button onclick="playAudio()">🔊 お手本再生</button>
+ <button onclick="playAudio()">🔊 全体を再生</button>
+
+ <div class="phrase-group">
+ <button onclick="playPhrase(-1)" title="前の文に戻る">⏮</button>
+ <button onclick="playPhrase(0)" id="play-phrase-btn">🔊 フレーズ再生</button>
+ <button onclick="playPhrase(1)" title="次の文に進む">⏭</button>
+ </div>
+
  <button id="mic-btn" onclick="toggleMic()">🎤 自分の発音をテスト</button>
 
  <div class="slider-container">
@@ -118,10 +137,20 @@ let currentParaIndex = 0;
 let recognition = null;
 let isListening = false;
 
+// === 1フレーズ再生用の変数 ===
+let currentSentenceIndex = 0;
+let sentences = [];
+
 function changeParagraph() {
  currentParaIndex = parseInt(document.getElementById('para-select').value);
  document.getElementById('mask-slider').value = 0;
  document.getElementById('feedback-display').style.display = 'none';
+ 
+ // 段落が変わったらフレーズ練習の状態をリセット
+ currentSentenceIndex = 0;
+ sentences = [];
+ document.getElementById('play-phrase-btn').innerText = "🔊 フレーズ再生";
+ 
  updateText();
 }
 
@@ -146,16 +175,51 @@ function updateText() {
  document.getElementById('text-display').innerText = displayText;
 }
 
+// === 文章をピリオド等の文末で分割する処理 ===
+function extractSentences() {
+ const text = paragraphs[currentParaIndex];
+ // . ! ? で終わる1文を切り出す正規表現
+ const matched = text.match(/[^.?!]+[.?!]+["']?/g);
+ if (matched) {
+ sentences = matched.map(function(s) { return s.trim(); });
+ } else {
+ sentences = [text]; // 分割できなかった場合は全体を1文として扱う
+ }
+}
+
+// === 1フレーズ再生の処理 ===
+function playPhrase(direction) {
+ // まだ分割していなければ分割する
+ if (sentences.length === 0) extractSentences();
+
+ // 前へ・次へ の移動を計算（directionが0なら現在の文をそのまま再生）
+ currentSentenceIndex += direction;
+ 
+ // 最初や最後を超えたらループさせる
+ if (currentSentenceIndex < 0) currentSentenceIndex = sentences.length - 1;
+ if (currentSentenceIndex >= sentences.length) currentSentenceIndex = 0;
+
+ // 再生中の音声をストップ
+ window.speechSynthesis.cancel();
+ 
+ const sentenceToPlay = sentences[currentSentenceIndex];
+ const utterance = new SpeechSynthesisUtterance(sentenceToPlay);
+ utterance.lang = 'en-US';
+ utterance.rate = parseFloat(document.getElementById('speed-select').value); // 速度設定を反映
+ 
+ // ボタンのテキストを「🔊 1/5文目」のように更新して現在地をわかりやすくする
+ document.getElementById('play-phrase-btn').innerText = "🔊 " + (currentSentenceIndex + 1) + "/" + sentences.length + "文目";
+
+ window.speechSynthesis.speak(utterance);
+}
+
+// === 全体再生の処理 ===
 function playAudio() {
  window.speechSynthesis.cancel();
  const text = paragraphs[currentParaIndex];
  const utterance = new SpeechSynthesisUtterance(text);
  utterance.lang = 'en-US';
- 
- // ここで選択された再生速度を取得して適用します
- const selectedSpeed = parseFloat(document.getElementById('speed-select').value);
- utterance.rate = selectedSpeed;
- 
+ utterance.rate = parseFloat(document.getElementById('speed-select').value);
  window.speechSynthesis.speak(utterance);
 }
 
@@ -250,10 +314,7 @@ function evaluateSpeech(recognizedText) {
 
 // === localStorage 関連の処理 ===
 function saveHistory(paraNum, maskRatio, score) {
- // 現在の履歴を取得（なければ空の配列）
  let history = JSON.parse(localStorage.getItem('speechMasterHistory')) || [];
- 
- // 新しい記録を作成
  const now = new Date();
  const record = {
  date: now.toLocaleDateString() + ' ' + now.getHours() + ':' + String(now.getMinutes()).padStart(2, '0'),
@@ -261,12 +322,8 @@ function saveHistory(paraNum, maskRatio, score) {
  mask: maskRatio,
  score: score + '%'
  };
- 
- // 配列の先頭に追加して保存
  history.unshift(record);
  localStorage.setItem('speechMasterHistory', JSON.stringify(history));
- 
- // 表示を更新
  loadHistory();
 }
 
@@ -280,7 +337,6 @@ function loadHistory() {
  return;
  }
 
- // 最新の10件だけ表示する
  history.slice(0, 10).forEach(function(record) {
  const row = '<tr>' +
  '<td>' + record.date + '</td>' +
