@@ -1,0 +1,295 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+ <meta charset="UTF-8">
+ <meta name="viewport" content="width=device-width, initial-scale=1.0">
+ <title>英語スピーチ暗記マスター</title>
+ <style>
+ body {
+ font-family: sans-serif;
+ max-width: 900px;
+ margin: 0 auto;
+ padding: 20px;
+ background-color: #f4f6f9;
+ }
+ .container {
+ background-color: white;
+ padding: 25px;
+ border-radius: 12px;
+ box-shadow: 0 4px 15px rgba(0,0,0,0.1);
+ }
+ h1 { color: #2c3e50; text-align: center; margin-top: 0; font-size: 24px; }
+ .controls {
+ display: flex; flex-wrap: wrap; gap: 15px; align-items: center;
+ background-color: #eef2f7; padding: 15px; border-radius: 8px; margin-bottom: 20px;
+ }
+ select, button { font-size: 16px; padding: 10px 15px; border-radius: 6px; border: 1px solid #ccc; }
+ button { background-color: #3498db; color: white; border: none; cursor: pointer; font-weight: bold; }
+ button:hover { background-color: #2980b9; }
+ #mic-btn { background-color: #2ecc71; }
+ #mic-btn:hover { background-color: #27ae60; }
+ .slider-container { display: flex; align-items: center; gap: 10px; flex-grow: 1; min-width: 250px; }
+ input[type=range] { flex-grow: 1; }
+ #text-display {
+ font-size: 20px; line-height: 1.8; padding: 20px; border: 2px solid #e0e0e0;
+ border-radius: 8px; min-height: 200px; background-color: #fafafa;
+ white-space: pre-wrap; word-wrap: break-word;
+ }
+ #feedback-display {
+ margin-top: 20px; padding: 20px; background-color: #fff3cd; border-radius: 8px;
+ border: 2px dashed #ffc107; display: none; font-size: 18px; line-height: 1.6;
+ }
+ .correct-word { color: #27ae60; font-weight: bold; }
+ .wrong-word { color: #e74c3c; text-decoration: underline; }
+ 
+ /* 履歴用のスタイル */
+ .history-section { margin-top: 30px; border-top: 2px solid #eee; padding-top: 20px; }
+ table { width: 100%; border-collapse: collapse; margin-top: 10px; }
+ th, td { padding: 10px; text-align: left; border-bottom: 1px solid #ddd; }
+ th { background-color: #f8f9fa; }
+ .clear-btn { background-color: #e74c3c; font-size: 14px; padding: 5px 10px; float: right; }
+ .clear-btn:hover { background-color: #c0392b; }
+ </style>
+</head>
+<body>
+
+<div class="container">
+ <h1>英語スピーチ暗記マスター</h1>
+
+ <div class="controls">
+ <label for="para-select"><b>段落:</b></label>
+ <select id="para-select" onchange="changeParagraph()">
+ <option value="0">第1段落</option>
+ <option value="1">第2段落</option>
+ <option value="2">第3段落</option>
+ <option value="3">第4段落</option>
+ <option value="4">第5段落</option>
+ </select>
+
+ <button onclick="playAudio()">🔊 お手本再生</button>
+ <button id="mic-btn" onclick="toggleMic()">🎤 自分の発音をテスト</button>
+
+ <div class="slider-container">
+ <label for="mask-slider"><b>虫食い:</b></label>
+ <input type="range" id="mask-slider" min="0" max="100" value="0" oninput="updateText()">
+ <span id="slider-value">0%</span>
+ </div>
+ </div>
+
+ <div id="text-display"></div>
+ <div id="feedback-display"></div>
+
+ <div class="history-section">
+ <h2>📊 学習の記録 <button class="clear-btn" onclick="clearHistory()">履歴をリセット</button></h2>
+ <table>
+ <thead>
+ <tr>
+ <th>日時</th>
+ <th>段落</th>
+ <th>虫食い率</th>
+ <th>正答率（AI判定）</th>
+ </tr>
+ </thead>
+ <tbody id="history-table-body">
+ </tbody>
+ </table>
+ </div>
+</div>
+
+<script>
+const paragraphs = [
+ '\"Go back to your country. All Chinese people are trash.\" These are the harsh words someone I know often says when watching news or social media on their smartphone. To be honest, I used to agree with them.',
+ 'When I saw some viral videos of people with bad manners, I blindly believed that China was a scary and terrible place. It was easy to judge millions of people from a small screen. But every time I hear those angry words, a memory from my childhood wakes up in my heart. When I was in the fourth grade, I was taking a train back to my hometown. It was getting late, and I was feeling sleepy. When the train arrived at my station, I had to stand up in a hurry, but my favorite hat fell between the seats. \"Oh no,\" I thought as I panicked. However, another passenger picked up my hat, dusted it off, and handed it to me with a warm, gentle smile. She said something to me, but it was in Chinese. I couldn\'t understand and speak Chinese, so I was shocked and frozen. All I could do was to smile back nervously and say, \"Thank you,\" in English. But her kind eyes and warm smile stayed in my heart.',
+ 'Then years later when I heard, \"All Chinese people are trash,\" I felt a sharp pain in my chest. I thought to myself, \"Was that kind woman on the train trash? No, absolutely not. Her smile was real.\" That experience on the train changed me. It made me want to break the barrier of language. I wanted to say, \"Thank you,\" in her own words if I ever met her again. So, I started learning Chinese.',
+ 'Last year, through my grandmother and my mother, I met a Chinese lady named Han. She came to my house once to help me practice my Chinese. She was so kind. I felt so grateful, but I also felt bad when I asked her a question. \"Is China a scary place?\" She looked at me and answered gently, \"Maybe some parts are, but not all of it.\" Then, she told me about the Japanese and Chinese media. \"They only broadcast the bad sides of each other.\" Her words hit me like ice water. At that moment, I realized something important. I thought, \"China is scary,\" based on some social media. But she didn\'t hate me or Japan. She looked at me simply as a person. I felt deeply ashamed of my shallow thinking, and it terrified me. Do you think we rely too much on the huge lens of a nation\'s news and social media?',
+ 'I don\'t want to look at a country and make assumptions anymore. I want to look at each person, simply as an individual human being, just like you and me. Also, as Han taught me, I will stop judging billions of people with one single label. Now, let me ask you. Will you keep looking at the cropped images? Or will you look at the real person standing right in front of you and try to understand their real voices? I hope that people all over the world will interact with one another without bias. Just like that kind woman on the train who handed me my hat, now it is our turn to cross the barrier of languages and history.'
+];
+
+let currentParaIndex = 0;
+let recognition = null;
+let isListening = false;
+
+function changeParagraph() {
+ currentParaIndex = parseInt(document.getElementById('para-select').value);
+ document.getElementById('mask-slider').value = 0;
+ document.getElementById('feedback-display').style.display = 'none';
+ updateText();
+}
+
+function updateText() {
+ const maskRatio = parseInt(document.getElementById('mask-slider').value) / 100;
+ document.getElementById('slider-value').innerText = Math.round(maskRatio * 100) + "%";
+ const text = paragraphs[currentParaIndex];
+ if (maskRatio === 0) {
+ document.getElementById('text-display').innerText = text;
+ return;
+ }
+ const tokens = text.match(/[\w']+|[^\w\s]+|\s+/g) || [];
+ const wordIndices = [];
+ tokens.forEach(function(token, index) { if (/[\w']+/.test(token)) wordIndices.push(index); });
+ const hideCount = Math.floor(wordIndices.length * maskRatio);
+ const shuffled = wordIndices.slice().sort(function() { return 0.5 - Math.random(); });
+ const indicesToHide = new Set(shuffled.slice(0, hideCount));
+ let displayText = "";
+ tokens.forEach(function(token, index) {
+ displayText += indicesToHide.has(index) ? " ____ " : token;
+ });
+ document.getElementById('text-display').innerText = displayText;
+}
+
+function playAudio() {
+ window.speechSynthesis.cancel();
+ const text = paragraphs[currentParaIndex];
+ const utterance = new SpeechSynthesisUtterance(text);
+ utterance.lang = 'en-US';
+ utterance.rate = 0.85;
+ window.speechSynthesis.speak(utterance);
+}
+
+function initSpeechRecognition() {
+ const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+ if (!SpeechRecognition) {
+ alert("お使いのブラウザはマイクでの音声認識に対応していません。Chromeブラウザでお試しください。");
+ return false;
+ }
+ recognition = new SpeechRecognition();
+ recognition.lang = 'en-US';
+ recognition.interimResults = false;
+ recognition.continuous = false;
+
+ recognition.onstart = function() {
+ isListening = true;
+ const btn = document.getElementById('mic-btn');
+ btn.innerText = "⏹️ 録音を停止して判定";
+ btn.style.backgroundColor = "#e74c3c";
+ const feedback = document.getElementById('feedback-display');
+ feedback.style.display = 'block';
+ feedback.innerHTML = "<strong>🎤 聞き取り中... 英語で発音してください。</strong>";
+ };
+
+ recognition.onresult = function(event) {
+ evaluateSpeech(event.results[0][0].transcript);
+ };
+
+ recognition.onerror = function(event) {
+ const feedback = document.getElementById('feedback-display');
+ feedback.style.display = 'block';
+ let errorMsg = "エラーが発生しました: " + event.error;
+ if (event.error === 'not-allowed') errorMsg = "マイクのアクセスを許可してください。";
+ feedback.innerHTML = '<span style="color:red;">⚠️ ' + errorMsg + '</span>';
+ };
+
+ recognition.onend = function() {
+ isListening = false;
+ const btn = document.getElementById('mic-btn');
+ btn.innerText = "🎤 自分の発音をテスト";
+ btn.style.backgroundColor = "#2ecc71";
+ };
+ return true;
+}
+
+function toggleMic() {
+ if (!recognition) { if (!initSpeechRecognition()) return; }
+ if (isListening) recognition.stop();
+ else { try { recognition.start(); } catch (e) { console.error(e); } }
+}
+
+function evaluateSpeech(recognizedText) {
+ const originalText = paragraphs[currentParaIndex];
+ const tokens = originalText.match(/[\w']+|[^\w\s]+|\s+/g) || [];
+ const normRec = recognizedText.toLowerCase().replace(/[.,!?;:"]/g, '').split(/\s+/);
+
+ let html = "";
+ let recIndex = 0;
+ let correctCount = 0; // 正解した単語数
+ let totalWords = 0; // 全単語数
+
+ tokens.forEach(function(token) {
+ if (/[\w']+/.test(token)) {
+ totalWords++;
+ let cleanToken = token.toLowerCase();
+ let found = false;
+ for (let i = recIndex; i < Math.min(recIndex + 5, normRec.length); i++) {
+ if (normRec[i] === cleanToken) { found = true; recIndex = i + 1; break; }
+ }
+ if (found) {
+ html += '<span class="correct-word">' + token + '</span>';
+ correctCount++;
+ } else {
+ html += '<span class="wrong-word">' + token + '</span>';
+ }
+ } else {
+ html += token;
+ }
+ });
+
+ // スコア計算
+ const score = totalWords > 0 ? Math.round((correctCount / totalWords) * 100) : 0;
+ const maskRatio = document.getElementById('slider-value').innerText;
+
+ document.getElementById('feedback-display').innerHTML = 
+ '<p><b>🗣️ あなたの声:</b><br>' + recognizedText + '</p>' +
+ '<p><b>📝 判定結果（正答率: ' + score + '%）:</b></p><p>' + html + '</p>';
+
+ // 履歴を保存して更新
+ saveHistory(currentParaIndex + 1, maskRatio, score);
+}
+
+// === localStorage 関連の処理 ===
+function saveHistory(paraNum, maskRatio, score) {
+ // 現在の履歴を取得（なければ空の配列）
+ let history = JSON.parse(localStorage.getItem('speechMasterHistory')) || [];
+ 
+ // 新しい記録を作成
+ const now = new Date();
+ const record = {
+ date: now.toLocaleDateString() + ' ' + now.getHours() + ':' + String(now.getMinutes()).padStart(2, '0'),
+ paragraph: '第' + paraNum + '段落',
+ mask: maskRatio,
+ score: score + '%'
+ };
+ 
+ // 配列の先頭に追加して保存
+ history.unshift(record);
+ localStorage.setItem('speechMasterHistory', JSON.stringify(history));
+ 
+ // 表示を更新
+ loadHistory();
+}
+
+function loadHistory() {
+ const history = JSON.parse(localStorage.getItem('speechMasterHistory')) || [];
+ const tbody = document.getElementById('history-table-body');
+ tbody.innerHTML = '';
+ 
+ if (history.length === 0) {
+ tbody.innerHTML = '<tr><td colspan="4" style="text-align:center;">まだ記録がありません。録音テストを行うとここに保存されます。</td></tr>';
+ return;
+ }
+
+ // 最新の10件だけ表示する
+ history.slice(0, 10).forEach(function(record) {
+ const row = '<tr>' +
+ '<td>' + record.date + '</td>' +
+ '<td>' + record.paragraph + '</td>' +
+ '<td>' + record.mask + '</td>' +
+ '<td>' + (parseInt(record.score) >= 80 ? '🌟 ' : '') + record.score + '</td>' +
+ '</tr>';
+ tbody.innerHTML += row;
+ });
+}
+
+function clearHistory() {
+ if (confirm('学習履歴をすべて消去しますか？')) {
+ localStorage.removeItem('speechMasterHistory');
+ loadHistory();
+ }
+}
+
+// 初期表示
+updateText();
+loadHistory();
+</script>
+
+</body>
+</html>
