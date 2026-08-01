@@ -110,7 +110,7 @@
  <button onclick="playPhrase(-1)" title="前の文に戻る">⏮</button>
  <button onclick="playPhrase(0)" id="play-phrase-btn">🔊 フレーズ再生</button>
  <button onclick="playPhrase(1)" title="次の文に進む">⏭</button>
- <!-- フレーズテスト用ボタンを追加 -->
+ <!-- フレーズテスト用ボタン -->
  <button id="mic-phrase-btn" onclick="toggleMic(true)">🎤 1文テスト</button>
  </div>
 
@@ -156,10 +156,11 @@ const paragraphs = [
 let currentParaIndex = 0;
 let recognition = null;
 let isListening = false;
-let isTestingPhrase = false; // 1文だけをテスト中かどうかのフラグ
+let isTestingPhrase = false;
 
 let currentSentenceIndex = 0;
 let sentences = [];
+let displayMode = 'paragraph'; // 'paragraph' または 'phrase' で表示を切り替える
 
 function changeParagraph() {
  currentParaIndex = parseInt(document.getElementById('para-select').value);
@@ -168,6 +169,7 @@ function changeParagraph() {
  
  currentSentenceIndex = 0;
  sentences = [];
+ displayMode = 'paragraph'; // 段落全体の表示に戻す
  document.getElementById('play-phrase-btn').innerText = "🔊 フレーズ再生";
  
  updateText();
@@ -176,11 +178,21 @@ function changeParagraph() {
 function updateText() {
  const maskRatio = parseInt(document.getElementById('mask-slider').value) / 100;
  document.getElementById('slider-value').innerText = Math.round(maskRatio * 100) + "%";
- const text = paragraphs[currentParaIndex];
+ 
+ // 表示モードに応じて対象のテキストを取得
+ let text = "";
+ if (displayMode === 'phrase') {
+ if (sentences.length === 0) extractSentences();
+ text = sentences[currentSentenceIndex];
+ } else {
+ text = paragraphs[currentParaIndex];
+ }
+ 
  if (maskRatio === 0) {
  document.getElementById('text-display').innerText = text;
  return;
  }
+ 
  const tokens = text.match(/[\w']+|[^\w\s]+|\s+/g) || [];
  const wordIndices = [];
  tokens.forEach(function(token, index) { if (/[\w']+/.test(token)) wordIndices.push(index); });
@@ -213,6 +225,9 @@ function playPhrase(direction) {
  if (currentSentenceIndex < 0) currentSentenceIndex = sentences.length - 1;
  if (currentSentenceIndex >= sentences.length) currentSentenceIndex = 0;
 
+ displayMode = 'phrase'; // 1文表示モードに切り替え
+ updateText(); // 画面のテキストを更新
+
  window.speechSynthesis.cancel();
  
  const sentenceToPlay = sentences[currentSentenceIndex];
@@ -227,6 +242,10 @@ function playPhrase(direction) {
 
 function playAudio() {
  window.speechSynthesis.cancel();
+ 
+ displayMode = 'paragraph'; // 段落全体の表示モードに戻す
+ updateText(); // 画面のテキストを更新
+ 
  const text = paragraphs[currentParaIndex];
  const utterance = new SpeechSynthesisUtterance(text);
  utterance.lang = 'en-US';
@@ -234,25 +253,28 @@ function playAudio() {
  window.speechSynthesis.speak(utterance);
 }
 
-// 追加: マイクの開始/停止を制御する関数
 function toggleMic(phraseMode) {
  if (!recognition) {
-  if (!initSpeechRecognition()) return;
+ if (!initSpeechRecognition()) return;
  }
  
  if (isListening) {
-  recognition.stop();
-  return;
+ recognition.stop();
+ return;
  }
 
  isTestingPhrase = phraseMode;
  
  // フレーズテストモードで、まだ文が抽出されていない場合は抽出する
  if (isTestingPhrase && sentences.length === 0) {
-  extractSentences();
-  document.getElementById('play-phrase-btn').innerText = "🔊 " + (currentSentenceIndex + 1) + "/" + sentences.length + "文目";
+ extractSentences();
+ document.getElementById('play-phrase-btn').innerText = "🔊 " + (currentSentenceIndex + 1) + "/" + sentences.length + "文目";
  }
  
+ // テスト対象に合わせて画面の表示も切り替える
+ displayMode = isTestingPhrase ? 'phrase' : 'paragraph';
+ updateText();
+
  recognition.start();
 }
 
@@ -301,14 +323,14 @@ function initSpeechRecognition() {
  // ボタンの見た目をリセット
  const btnPhrase = document.getElementById('mic-phrase-btn');
  if (btnPhrase) {
-  btnPhrase.innerText = "🎤 1文テスト";
-  btnPhrase.style.backgroundColor = "#2ecc71";
+ btnPhrase.innerText = "🎤 1文テスト";
+ btnPhrase.style.backgroundColor = "#2ecc71";
  }
  
  const btnAll = document.getElementById('mic-btn');
  if (btnAll) {
-  btnAll.innerText = "🎤 段落全体をテスト";
-  btnAll.style.backgroundColor = "#2ecc71";
+ btnAll.innerText = "🎤 段落全体をテスト";
+ btnAll.style.backgroundColor = "#2ecc71";
  }
  };
  return true;
@@ -318,9 +340,9 @@ function evaluateSpeech(recognizedText) {
  // 判定対象を、1文か段落全体かで切り替える
  let originalText = "";
  if (isTestingPhrase) {
-  originalText = sentences[currentSentenceIndex];
+ originalText = sentences[currentSentenceIndex];
  } else {
-  originalText = paragraphs[currentParaIndex];
+ originalText = paragraphs[currentParaIndex];
  }
  
  const tokens = originalText.match(/[\w']+|[^\w\s]+|\s+/g) || [];
@@ -331,7 +353,6 @@ function evaluateSpeech(recognizedText) {
  let correctCount = 0;
  let totalWords = 0;
  
- // 間違えた単語を保存する配列
  let missedWords = [];
 
  tokens.forEach(function(token) {
@@ -347,18 +368,16 @@ function evaluateSpeech(recognizedText) {
  correctCount++;
  } else {
  html += '<span class="wrong-word">' + token + '</span>';
- missedWords.push(token); // 間違えた単語を記録
+ missedWords.push(token);
  }
  } else {
  html += token;
  }
  });
 
- // スコア計算
  const score = totalWords > 0 ? Math.round((correctCount / totalWords) * 100) : 0;
  const maskRatio = document.getElementById('slider-value').innerText;
 
- // --- 評価とアドバイスの生成 ---
  let evaluationMsg = "";
  if (score >= 90) {
  evaluationMsg = "🌟 素晴らしい！非常にクリアで聞き取りやすい発音です！";
@@ -372,7 +391,6 @@ function evaluateSpeech(recognizedText) {
 
  let adviceHtml = "";
  if (missedWords.length > 0) {
- // 重複を削除して先頭から5つ程度をピックアップ
  let uniqueMissed = [...new Set(missedWords.map(w => w.toLowerCase()))];
  let displayMissed = uniqueMissed.slice(0, 5).join(", ");
  adviceHtml = "<p style='margin-bottom: 0;'>💡 <b>ワンポイントアドバイス:</b><br>以下の単語のアクセントや発音を、お手本音声でよく確認してみましょう。<br>【 <b>" + displayMissed + (uniqueMissed.length > 5 ? " など" : "") + "</b> 】</p>";
@@ -380,7 +398,6 @@ function evaluateSpeech(recognizedText) {
  adviceHtml = "<p style='margin-bottom: 0;'>💡 <b>ワンポイントアドバイス:</b><br>パーフェクトです！今のリズムと発音を忘れないように、何度か繰り返して定着させましょう。</p>";
  }
 
- // フィードバック画面の出力
  document.getElementById('feedback-display').innerHTML = 
  '<p><b>🗣️ あなたの声:</b><br>' + recognizedText + '</p>' +
  '<p><b>📝 判定結果（正答率: ' + score + '%）:</b></p>' +
@@ -390,16 +407,13 @@ function evaluateSpeech(recognizedText) {
  adviceHtml +
  '</div>';
 
- // 履歴用のラベル作成
  let targetLabel = isTestingPhrase ? 
-  `第${currentParaIndex + 1}段落(${currentSentenceIndex + 1}文目)` : 
-  `第${currentParaIndex + 1}段落(全体)`;
+ `第${currentParaIndex + 1}段落(${currentSentenceIndex + 1}文目)` : 
+ `第${currentParaIndex + 1}段落(全体)`;
 
- // 履歴を保存して更新
  saveHistory(targetLabel, maskRatio, score);
 }
 
-// === localStorage 関連の処理 ===
 function saveHistory(targetLabel, maskRatio, score) {
  let history = JSON.parse(localStorage.getItem('speechMasterHistory')) || [];
  const now = new Date();
