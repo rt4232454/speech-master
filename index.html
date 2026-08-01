@@ -66,6 +66,15 @@
  <option value="4">第5段落</option>
  </select>
 
+ <label for="speed-select"><b>速度:</b></label>
+ <select id="speed-select">
+ <option value="0.5">0.5x (とてもゆっくり)</option>
+ <option value="0.7">0.7x (ゆっくり)</option>
+ <option value="0.85" selected>0.85x (ややゆっくり)</option>
+ <option value="1.0">1.0x (標準)</option>
+ <option value="1.2">1.2x (少し速い)</option>
+ </select>
+
  <button onclick="playAudio()">🔊 お手本再生</button>
  <button id="mic-btn" onclick="toggleMic()">🎤 自分の発音をテスト</button>
 
@@ -142,7 +151,11 @@ function playAudio() {
  const text = paragraphs[currentParaIndex];
  const utterance = new SpeechSynthesisUtterance(text);
  utterance.lang = 'en-US';
- utterance.rate = 0.85;
+ 
+ // ここで選択された再生速度を取得して適用します
+ const selectedSpeed = parseFloat(document.getElementById('speed-select').value);
+ utterance.rate = selectedSpeed;
+ 
  window.speechSynthesis.speak(utterance);
 }
 
