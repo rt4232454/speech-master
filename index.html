@@ -26,6 +26,8 @@
  select, button { font-size: 16px; padding: 10px 15px; border-radius: 6px; border: 1px solid #ccc; }
  button { background-color: #3498db; color: white; border: none; cursor: pointer; font-weight: bold; }
  button:hover { background-color: #2980b9; }
+ 
+ /* 全体テストボタンのスタイル */
  #mic-btn { background-color: #2ecc71; }
  #mic-btn:hover { background-color: #27ae60; }
  
@@ -39,6 +41,10 @@
  }
  .phrase-group button:hover { background-color: #e67e22; }
  #play-phrase-btn { min-width: 130px; text-align: center; }
+
+ /* 追加: フレーズごとのマイクテストボタン */
+ #mic-phrase-btn { background-color: #2ecc71; margin-left: 10px; }
+ #mic-phrase-btn:hover { background-color: #27ae60; }
 
  .slider-container { display: flex; align-items: center; gap: 10px; flex-grow: 1; min-width: 250px; }
  input[type=range] { flex-grow: 1; }
@@ -104,9 +110,12 @@
  <button onclick="playPhrase(-1)" title="前の文に戻る">⏮</button>
  <button onclick="playPhrase(0)" id="play-phrase-btn">🔊 フレーズ再生</button>
  <button onclick="playPhrase(1)" title="次の文に進む">⏭</button>
+ <!-- フレーズテスト用ボタンを追加 -->
+ <button id="mic-phrase-btn" onclick="toggleMic(true)">🎤 1文テスト</button>
  </div>
 
- <button id="mic-btn" onclick="toggleMic()">🎤 自分の発音をテスト</button>
+ <!-- 段落全体のテストボタン -->
+ <button id="mic-btn" onclick="toggleMic(false)">🎤 段落全体をテスト</button>
 
  <div class="slider-container">
  <label for="mask-slider"><b>虫食い:</b></label>
@@ -124,7 +133,7 @@
  <thead>
  <tr>
  <th>日時</th>
- <th>段落</th>
+ <th>対象</th>
  <th>虫食い率</th>
  <th>正答率（AI判定）</th>
  </tr>
@@ -147,6 +156,7 @@ const paragraphs = [
 let currentParaIndex = 0;
 let recognition = null;
 let isListening = false;
+let isTestingPhrase = false; // 1文だけをテスト中かどうかのフラグ
 
 let currentSentenceIndex = 0;
 let sentences = [];
@@ -186,6 +196,7 @@ function updateText() {
 
 function extractSentences() {
  const text = paragraphs[currentParaIndex];
+ // 文の区切り（ピリオド、疑問符、感嘆符 ＋ 引用符）で分割
  const matched = text.match(/[^.?!]+[.?!]+["']?/g);
  if (matched) {
  sentences = matched.map(function(s) { return s.trim(); });
@@ -223,6 +234,28 @@ function playAudio() {
  window.speechSynthesis.speak(utterance);
 }
 
+// 追加: マイクの開始/停止を制御する関数
+function toggleMic(phraseMode) {
+ if (!recognition) {
+  if (!initSpeechRecognition()) return;
+ }
+ 
+ if (isListening) {
+  recognition.stop();
+  return;
+ }
+
+ isTestingPhrase = phraseMode;
+ 
+ // フレーズテストモードで、まだ文が抽出されていない場合は抽出する
+ if (isTestingPhrase && sentences.length === 0) {
+  extractSentences();
+  document.getElementById('play-phrase-btn').innerText = "🔊 " + (currentSentenceIndex + 1) + "/" + sentences.length + "文目";
+ }
+ 
+ recognition.start();
+}
+
 function initSpeechRecognition() {
  const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
  if (!SpeechRecognition) {
@@ -236,12 +269,18 @@ function initSpeechRecognition() {
 
  recognition.onstart = function() {
  isListening = true;
- const btn = document.getElementById('mic-btn');
+ 
+ // 押されたボタンに応じて見た目を変更
+ const btnId = isTestingPhrase ? 'mic-phrase-btn' : 'mic-btn';
+ const btn = document.getElementById(btnId);
  btn.innerText = "⏹️ 録音を停止して判定";
  btn.style.backgroundColor = "#e74c3c";
+ 
  const feedback = document.getElementById('feedback-display');
  feedback.style.display = 'block';
- feedback.innerHTML = "<strong>🎤 聞き取り中... 英語で発音してください。</strong>";
+ 
+ const targetText = isTestingPhrase ? "1文" : "段落全体";
+ feedback.innerHTML = `<strong>🎤 聞き取り中... ${targetText}を英語で発音してください。</strong>`;
  };
 
  recognition.onresult = function(event) {
@@ -258,15 +297,32 @@ function initSpeechRecognition() {
 
  recognition.onend = function() {
  isListening = false;
- const btn = document.getElementById('mic-btn');
- btn.innerText = "🎤 自分の発音をテスト";
- btn.style.backgroundColor = "#2ecc71";
+ 
+ // ボタンの見た目をリセット
+ const btnPhrase = document.getElementById('mic-phrase-btn');
+ if (btnPhrase) {
+  btnPhrase.innerText = "🎤 1文テスト";
+  btnPhrase.style.backgroundColor = "#2ecc71";
+ }
+ 
+ const btnAll = document.getElementById('mic-btn');
+ if (btnAll) {
+  btnAll.innerText = "🎤 段落全体をテスト";
+  btnAll.style.backgroundColor = "#2ecc71";
+ }
  };
  return true;
 }
 
 function evaluateSpeech(recognizedText) {
- const originalText = paragraphs[currentParaIndex];
+ // 判定対象を、1文か段落全体かで切り替える
+ let originalText = "";
+ if (isTestingPhrase) {
+  originalText = sentences[currentSentenceIndex];
+ } else {
+  originalText = paragraphs[currentParaIndex];
+ }
+ 
  const tokens = originalText.match(/[\w']+|[^\w\s]+|\s+/g) || [];
  const normRec = recognizedText.toLowerCase().replace(/[.,!?;:"]/g, '').split(/\s+/);
 
@@ -334,17 +390,22 @@ function evaluateSpeech(recognizedText) {
  adviceHtml +
  '</div>';
 
+ // 履歴用のラベル作成
+ let targetLabel = isTestingPhrase ? 
+  `第${currentParaIndex + 1}段落(${currentSentenceIndex + 1}文目)` : 
+  `第${currentParaIndex + 1}段落(全体)`;
+
  // 履歴を保存して更新
- saveHistory(currentParaIndex + 1, maskRatio, score);
+ saveHistory(targetLabel, maskRatio, score);
 }
 
 // === localStorage 関連の処理 ===
-function saveHistory(paraNum, maskRatio, score) {
+function saveHistory(targetLabel, maskRatio, score) {
  let history = JSON.parse(localStorage.getItem('speechMasterHistory')) || [];
  const now = new Date();
  const record = {
  date: now.toLocaleDateString() + ' ' + now.getHours() + ':' + String(now.getMinutes()).padStart(2, '0'),
- paragraph: '第' + paraNum + '段落',
+ paragraph: targetLabel,
  mask: maskRatio,
  score: score + '%'
  };
